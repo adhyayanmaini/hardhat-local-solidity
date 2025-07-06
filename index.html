@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hardhat Explorer • Etherscan Style</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0e0e12;
+      color: #cfd8dc;
+      font-family: Arial, sans-serif;
+    }
+    header { background: #1f1f25; padding: 15px; font-size: 24px; color: #1abc9c; }
+    .wrapper { display: flex; flex-wrap: wrap; max-width: 1200px; margin: 20px auto; gap: 20px; }
+    .widget, .main {
+      background: #14141b; border-radius: 8px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,200,200,0.2);
+    }
+    .widget { flex: 1; min-width: 300px; }
+    .main { flex: 2; }
+    h2 { margin-top: 0; color: #1abc9c; }
+    input, button {
+      width: 100%; padding: 10px; margin: 10px 0;
+      background: #21212a; border: none; color: #cfd8dc; border-radius: 6px;
+    }
+    button { background: #1abc9c; cursor: pointer; font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td {
+      padding: 8px; text-align: left;
+      border-bottom: 1px solid #2a2a34;
+    }
+    .token-balance { display: flex; justify-content: space-between; }
+    .token-symbol { color: #1abc9c; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>🔍 Hardhat Local Explorer</header>
+  <div class="wrapper">
+
+    <!-- Latest Blocks & TXs -->
+    <div class="widget main">
+      <h2>Latest Blocks</h2>
+      <table id="blocksTable">
+        <thead><tr><th>#</th><th>Hash</th><th>Tx Count</th></tr></thead><tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Address & Token Balances -->
+    <div class="widget">
+      <h2>Address Balance</h2>
+      <input id="addr-in" placeholder="0x..." />
+      <button onclick="showAddress()">Lookup</button>
+      <div id="balances"></div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.8.1/dist/ethers.umd.min.js"></script>
+  <script>
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+
+    async function updateBlocks() {
+      try {
+        const latest = await provider.getBlockNumber();
+        const rows = [];
+        for (let i = 0; i < 5; i++) {
+          const b = await provider.getBlock(latest - i);
+          rows.push(`<tr><td>${b.number}</td><td>${b.hash.slice(0,10)}…</td><td>${b.transactions.length}</td></tr>`);
+        }
+        document.querySelector("#blocksTable tbody").innerHTML = rows.join("");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function showAddress() {
+      const addr = document.getElementById("addr-in").value.trim();
+      const el = document.getElementById("balances");
+      el.innerHTML = "Loading…";
+      try {
+        if (!ethers.isAddress(addr)) throw new Error("Invalid address");
+        const eth = await provider.getBalance(addr);
+        let html = `<div class="token-balance"><span>ETH</span><span class="token-symbol">${ethers.formatEther(eth)} ETH</span></div>`;
+
+        // Example tokens to check
+        const tokens = [
+          { symbol: "USDT", addr: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
+          { symbol: "USDC", addr: "0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" },
+          { symbol: "PEPE", addr: "0x6982508145454Ce325dDbE47a25d4ec3d2311933" }
+        ];
+        for (let t of tokens) {
+          const c = new ethers.Contract(t.addr, ["function balanceOf(address) view returns (uint)", "function decimals() view returns (uint8)"], provider);
+          const bal = await c.balanceOf(addr);
+          const decimals = await c.decimals();
+          const amt = ethers.formatUnits(bal, decimals);
+          html += `<div class="token-balance"><span>${t.symbol}</span><span class="token-symbol">${amt}</span></div>`;
+        }
+        el.innerHTML = html;
+      } catch (err) {
+        el.innerHTML = `<span style="color:#e74c3c">${err.message}</span>`;
+      }
+    }
+
+    // Auto-refresh latest blocks every 10s
+    updateBlocks();
+    setInterval(updateBlocks, 10000);
+  </script>
+</body>
+</html>
